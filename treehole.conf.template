@@ -16,7 +16,7 @@ server {
     ssl_certificate_key secrets/ssl.key;
 
     if ($host = ${NGINX_HOST}) {
-        return 301 https://www.${NGINX_HOST}$request_uri;
+        return 302 https://www.${NGINX_HOST}$request_uri;
     }
 
     location / {
