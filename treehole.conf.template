@@ -1,0 +1,43 @@
+upstream frontend {
+    server frontend:80;
+}
+
+upstream backend {
+    server backend:80;
+}
+
+server {
+    server_name ${NGINX_HOST} www.${NGINX_HOST};
+
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+
+    ssl_certificate secrets/ssl.crt;
+    ssl_certificate_key secrets/ssl.key;
+
+    if ($host = ${NGINX_HOST}) {
+        return 301 https://www.${NGINX_HOST}$request_uri;
+    }
+
+    location / {
+        proxy_pass http://frontend;
+    }
+
+    location /api/ {
+        proxy_pass http://backend/;
+    }
+
+    location /api/ws/ {
+        proxy_pass http://backend/ws/;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+    }
+
+    location /online {
+        add_header cache-control no-cache;
+        return 200;
+        access_log off;
+    }
+
+
+}
