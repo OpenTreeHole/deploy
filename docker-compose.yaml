@@ -1,65 +1,121 @@
 version: '3.9'
 
 services:
-  treehole:
-    image: shi2002/open_tree_hole_backend
+  nginx:
+    image: shi2002/open_tree_hole_nginx:dev
     ports:
       - "80:80"
+      - "443:443"
     restart: always
+    volumes:
+      - secrets:/etc/nginx/secrets
     environment:
-      - SITE_NAME=
-      - ALLOW_CONNECT_HOSTS=
-      - EMAIL_WHITELIST=
-      - DATABASE_HOST=db
-      - DATABASE_NAME=
-      - DATABASE_USER=
-      - DATABASE_PASSWORD=
-      - SECRET_KEY=
-      - REDIS_ADDRESS=redis://redis:6379
+      - NGINX_HOST=${NGINX_HOST}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      - frontend
+      - backend
 
+  frontend:
+    image: shi2002/open_tree_hole_frontend:dev
+    restart: always
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      - backend
+
+  backend:
+    image: shi2002/open_tree_hole_backend:dev
+    restart: always
+    volumes:
+      - secrets:/www/backend/secrets
+    environment:
+      - HOLE_ENV=${HOLE_ENV}
+      - SITE_NAME=${SITE_NAME}
+      - ALLOW_CONNECT_HOSTS=${ALLOW_CONNECT_HOSTS}
+      - EMAIL_WHITELIST=${EMAIL_WHITELIST}
+      - DATABASE_HOST=${DATABASE_HOST}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - GITHUB_OWENER=${GITHUB_OWENER}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - GITHUB_BRANCH=${GITHUB_BRANCH}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       - db
       - redis
+
+  celery:
+    image: shi2002/open_tree_hole_backend:dev
+    entrypoint: ["celery", "-A", "OpenTreeHole", "worker", "-l", "info" ]
+    volumes:
+      - secrets:/www/backend/secrets
+    environment:
+      - APNS_KEY_PATH=${APNS_KEY_PATH}
+      - PUSH_NOTIFICATION_CLIENT_PACKAGE_NAME_IOS=${PUSH_NOTIFICATION_CLIENT_PACKAGE_NAME_IOS}
+      - PUSH_NOTIFICATION_CLIENT_PACKAGE_NAME_ANDROID=${PUSH_NOTIFICATION_CLIENT_PACKAGE_NAME_ANDROID}
+      - DATABASE_HOST=${DATABASE_HOST}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=465
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_TLS=False
+      - EMAIL_USE_SSL=True
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - HTTP_PROXY=${HTTP_PROXY}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: always
+    depends_on:
+      - redis
+      - backend
+
+  celery-beats:
+    image: shi2002/open_tree_hole_backend:dev
+    entrypoint: ["celery", "-A", "OpenTreeHole", "beat", "-l", "info" ]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: always
+    depends_on:
+      - redis
+      - backend
+      - celery
 
   db:
     image: mysql
     volumes:
       - data:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=
-      - MYSQL_DATABASE=
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
     restart: always
 
   redis:
     image: redis
     restart: always
 
-  celery:
-    image: shi2002/open_tree_hole_backend
-    entrypoint: [ "pipenv", "run", "celery", "-A", "OpenTreeHole", "worker", "-l", "info" ]
-    environment:
-      - EMAIL_HOST=
-      - EMAIL_PORT=
-      - EMAIL_HOST_USER=
-      - EMAIL_HOST_PASSWORD=
-      - EMAIL_USE_TLS=
-      - EMAIL_USE_SSL=
-      - DEFAULT_FROM_EMAIL=
-      - GITHUB_OWENER=
-      - GITHUB_TOKEN=
-      - GITHUB_REPO=
-      - GITHUB_BRANCH=
-      - REDIS_ADDRESS=redis://redis:6379
-    restart: always
-    depends_on:
-      - redis
-      - treehole
-
   watchtower:
-    image: containrrr/watchtower 
+    image: containrrr/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    entrypoint: [ "/watchtower", "--cleanup" ]
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - TZ=${TZ}
+      - WATCHTOWER_POLL_INTERVAL=60
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: always
 
 volumes:
   data:
+  secrets:
